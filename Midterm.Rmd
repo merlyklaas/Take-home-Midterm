@@ -1,0 +1,89 @@
+---
+title: "Midterm"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(glue)
+library(rio)
+library(purrr)
+library(dplyr)
+library (tidyverse)
+install.packages
+library(janitor)
+```
+
+#Use the function above to download all of the data from the 2014-15 to 2017-18 school years and bind it into a single data frame, using a single function (i.e., one line of code). Note, this may take a minute or two to run, depending on your Internet speed.
+```{r}
+download_file <- function(year) {
+  link <- glue::glue("https://www.oregon.gov/ode/educator-resources/assessment/TestResults20{year}/pagr_schools_ela_raceethnicity_{year-1}{year}.xlsx")
+  rio::import(link, setclass = "tibble", na = c("-", "--", "*"))
+}
+i<-map_dfr(15:18, download_file, .id=NULL)
+```
+
+
+```{r}
+d<-i
+```
+
+# Filter for only student groups coded as "White" or "Hispanic/Latino".
+```{r}
+d<-d %>%  
+  filter(`Student Group` %in% c("White","Hispanic/Latino"))
+```
+# Select variables related to the number of students in each of the levels (1:4), and not percentages or collapsed levels.
+```{r}
+d <- d %>% 
+  select ((-starts_with("Percent")), -`Number Proficient (Level 3 or 4)`, 
+          -`Participation Rate`, -`Number of Participants`,-`Number Proficient`, -ends_with("ID"), -Subject)
+d <- clean_names(d)
+head (d) 
+```
+```{r}
+d<- pivot_longer(d, 
+             cols = c(number_level_1:number_level_4),
+             names_to = "level",
+             values_to = "n")
+d <- drop_na(d,n)
+
+
+```
+# Recode the "level" value
+```{r}
+d <- d %>% mutate (level=recode(level,
+                           number_level_1= "1", number_level_2 ="2", number_level_3 = "3", number_level_4 ="4"))
+```
+# Sum the n across grades and school for each district within each academic year, student group, and level.
+```{r}
+d <- d %>% group_by(academic_year, district, student_group, level) %>% 
+  mutate(n = sum(n)) %>% 
+  ungroup()
+```
+# Calculate the number of schools (unique schools listed) for each district. Also move your data to a wider format where the student groups become new columns, filled by the district n. Remove districts that did not report numbers for one or both student groups (i.e., drop missing data from the new columns). 
+
+```{r}
+
+d <- d %>% pivot_wider(names_from = student_group, values_from = n) %>% 
+  clean_names()
+d<-  drop_na(d, hispanic_latino, white)
+d
+
+```
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
