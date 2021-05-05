@@ -349,7 +349,7 @@ paths
 ```
 
 ```{r}
-stapled_plots$plots %>% 
+p %>% 
   ungroup() %>%
   mutate(path = paths) %>% 
   rowwise() %>%
