@@ -186,28 +186,29 @@ dat <-
   filter(district %in% dists) %>% 
   left_join(schools_per_district, by = 'district') %>% 
   mutate(
-    district = stringr::str_extract(district, '[^ SD]+')
+    district = stringr::str_extract(district, '[^ ]+')
       ) %>% 
   select(-data, -auc)
-plot_dat <- dat %>% filter(district == 'Bandon')
+
 ```
 
+### Method 1
+
 ```{r}
-p <- 
+ p <- 
   dat %>% 
-  select(academic_year, district, n_school, v, v_se) %>% 
-  group_by(district) %>% 
+  group_by(district, n_school) %>% 
   nest() %>% 
   mutate(
-    plot = map2(.x = data, .y = district, ~{
+    plot = pmap(list(data, district, n_school), ~{
       ggplot(
-        data = .x,
+        data = ..1,
         aes(
           x = academic_year,
           y = v, 
           ymin = v - 1.96*v_se, 
           ymax = v + 1.96*v_se, 
-          group = .y
+          group = ..2
           )
         ) +
         geom_errorbar(width = 0.25) +
@@ -227,86 +228,123 @@ p <-
         labs(
           x = 'School year', 
           y = 'Average achievement difference (SD units)', 
-          #caption = glue('Note: District included {n_school} schools.'), 
-          title = glue('Achievement Gap Estimates: {.y} School District'), 
-          subtitle = 
-            "Negative values indicate White students have higher average achievement
-Positive values indicate Hispanic/Latino students have higher average achievement") +
-        theme(plot.title.position = 'plot')
-      }))
+          caption = glue('Note: District included {..3} schools.'), 
+          title = glue('Achievement Gap Estimates: {..2} School District'), 
+          subtitle =
+           "Negative values indicate <span style = 'color:#5CA3FF;'>White</span> students have higher average achievement <br> Positive values indicate <span style='color:#D35CFF;'>Hispanic/Latino</span> students have higher average achievement") +
+        theme(
+          plot.title.position = 'plot', 
+          plot.subtitle = element_markdown(), 
+          plot.title = element_markdown('bold')
+          )
+      }
+)
+)
+
 ```
  
+### Method 2
+
 ```{r}
-# nested_dat <- 
-#   dat %>% 
-#   group_by(district) %>% 
-#   nest()
-# 
-# plots <-
-#   nested_dat %>% 
-#   mutate(
-#     plot = pmap(
-#       list(
-#         data = nested_dat$data, 
-#         academic_year = nested_dat$data$academic_year, 
-#         district = dat$district, 
-#         n_school = dat$n_school
-#         ), ~{
+#p2 <-
+looped_plots <- tibble(district = dat$district, 
+                       plot = list())
+
+```
+
+# THIS NEEDS TO BE FIXED STILL
+
+```{r}
+# midterm_plot <-
+#   function(data, academic_year, v, v_se, given_district, n_school){
+#     data_to_use <- data[which(data$district == given_district),]
+#     p <- 
 #       ggplot(
-#         data = ..1,
-#         aes(
-#           x = academic_year,
-#           y = v, 
-#           ymin = v - 1.96*v_se, 
-#           ymax = v + 1.96*v_se, 
-#           group = .y
-#           )
-#         ) +
-#         geom_errorbar(width = 0.25) +
-#         geom_line() +
-#         geom_point(
-#           aes(
-#             color = ifelse(v < 0, '#D35CFF', '#5CA3FF')
-#             ), 
-#           size = 2
-#           ) + 
-#         geom_hline(
-#           yintercept = 0, 
-#           color = '#DA5959'
-#           ) +
-#         scale_color_identity() +
-#         theme_minimal() +
-#         labs(
-#           x = 'School year', 
-#           y = 'Average achievement difference (SD units)', 
-#           caption = glue('Note: District included {..3} schools.'), 
-#           title = glue('Achievement Gap Estimates: {..2} School District'), 
-#           #subtitle = 
-# #            "Negative values indicate 
-# #<span style = 'color:#5CA3FF;'>White</span>
-# #students have higher average achievement
-# #Positive values indicate
-# #<span style='color:D35CFF;'>Hispanic/Latino</span>
-# #students have higher average achievement"
-# ) +
-#         theme(plot.title.position = 'plot')
-#       }))
+#       data = data_to_use,
+#       aes(
+#         x = academic_year,
+#         y = v, 
+#         ymin = v - 1.96*v_se, 
+#         ymax = v + 1.96*v_se, 
+#         group = district
+#         )
+#       ) +
+#     geom_errorbar(width = 0.25) +
+#     geom_line() +
+#     geom_point(
+#       aes(
+#         color = ifelse(v < 0, '#D35CFF', '#5CA3FF')
+#         ), 
+#       size = 2
+#       ) + 
+#     geom_hline(
+#       yintercept = 0, 
+#       color = '#DA5959'
+#       ) +
+#     scale_color_identity() +
+#     theme_minimal() +
+#     labs(
+#       x = 'School year', 
+#       y = 'Average achievement difference (SD units)', 
+#       #caption = glue('Note: District included {n_school} schools.'), 
+#       #title = glue('Achievement Gap Estimates: {district} School District'), 
+#       subtitle = 
+#         "Negative values indicate White students have higher average achievement
+# Positive values indicate Hispanic/Latino students have higher average achievement") +
+#     theme(plot.title.position = 'plot')
+#     return(p)
+#   }
 
 ```
- 
+
+```{r}
+# for (i in 1:nrow(dat)){
+#   district_i <- looped_plots$district[i]
+#   looped_plots$plot[i] <-
+#   midterm_plot(
+#       data = dat, 
+#       academic_year = academic_year, 
+#       v = v, 
+#       v_se = v_se, 
+#       given_district = district_i, 
+#       n_school = n_school
+#       )
+#   return(looped_plots$plot[i])
+#   #return(looped_plots)
+# }
+```
  
 ```{r}
-p$plot[[2]]
+p$plot[[6]]
 ```
-
 
 ## Extra Credit
 
 For up to one point extra credit, create a third set that “staples together” each of the preceding pairs of plots (i.e., to confirm that the plots were produced identically by both methods).
 
+
+## 4. Save the plots into a “plots” directory. Make sure the file names are meaningful.
+
 ```{r}
+files <- str_replace_all(tolower(p$district), " ", "-")
+paths <- here::here("Plots", glue("{files}.png"))
+paths
+```
+
+```{r}
+p %>% 
+  ungroup() %>%
+  mutate(path = paths) %>% 
+  rowwise() %>%
+  summarize(
+    ggsave(
+      filename = paths, 
+      plot = plot, 
+      width = 9.5, 
+      height = 6.5,
+      dpi = 500
+    )
+  )
 
 ```
 
-
-## 4. Save the plots into a “plots” directory. Make sure the file names are meaningful.
