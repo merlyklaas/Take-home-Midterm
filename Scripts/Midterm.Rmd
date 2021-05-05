@@ -18,6 +18,8 @@ library(tidyverse)
 library(rio)
 library(janitor)
 library(gapr)
+#install.packages('ggtext')
+library(ggtext)
 ```
 
 # Part A. 
@@ -77,10 +79,10 @@ d <- d %>%
     level = 
       recode(
         level,
-        number_level_1= "1", 
-        number_level_2 ="2", 
+        number_level_1 = "1", 
+        number_level_2 = "2", 
         number_level_3 = "3", 
-        number_level_4 ="4")
+        number_level_4 = "4")
     )
 ```
 
@@ -181,57 +183,130 @@ dists <-
 
 dat <- 
   d_nested1 %>% 
-  filter(district %in% dists)
-```
-
-```{r}
-plot_dat <- 
-  dat %>% 
+  filter(district %in% dists) %>% 
   left_join(schools_per_district, by = 'district') %>% 
   mutate(
     district = stringr::str_extract(district, '[^ SD]+')
-      )
+      ) %>% 
+  select(-data, -auc)
+plot_dat <- dat %>% filter(district == 'Bandon')
 ```
 
 ```{r}
-plot_dat %>% 
-  filter(district == 'Bandon') %>% 
-  ggplot(
-    aes(
-      x = academic_year,
-      y = v, 
-      ymin = v - 1.96*v_se, 
-      ymax = v + 1.96*v_se, 
-      group = district
-      )
-    ) +
-  geom_errorbar(width = 0.25) +
-  geom_line() +
-  geom_point(
-    aes(
-      color = ifelse(v < 0, '#D35CFF', '#5CA3FF')
-        ), 
-    size = 2
-    ) + 
-  geom_hline(
-    yintercept = 0, 
-    color = '#DA5959'
-    ) +
-  scale_color_identity() +
-  theme_minimal() +
-  labs(
-    x = 'School year', 
-    y = 'Average achievement difference (SD units)', 
-    caption = 'Note: District included {n_school} schools.', 
-    title = 'Achievement Gap Estimates: {district} School District', 
-    subtitle = 'Negative values indicate White students have higher average achievement
-Positive values indicate Hispanic/Latino students have higher average achievement'
-    ) +
-  theme(plot.title.position = 'plot')
+p <- 
+  dat %>% 
+  select(academic_year, district, n_school, v, v_se) %>% 
+  group_by(district) %>% 
+  nest() %>% 
+  mutate(
+    plot = map2(.x = data, .y = district, ~{
+      ggplot(
+        data = .x,
+        aes(
+          x = academic_year,
+          y = v, 
+          ymin = v - 1.96*v_se, 
+          ymax = v + 1.96*v_se, 
+          group = .y
+          )
+        ) +
+        geom_errorbar(width = 0.25) +
+        geom_line() +
+        geom_point(
+          aes(
+            color = ifelse(v < 0, '#D35CFF', '#5CA3FF')
+            ), 
+          size = 2
+          ) + 
+        geom_hline(
+          yintercept = 0, 
+          color = '#DA5959'
+          ) +
+        scale_color_identity() +
+        theme_minimal() +
+        labs(
+          x = 'School year', 
+          y = 'Average achievement difference (SD units)', 
+          #caption = glue('Note: District included {n_school} schools.'), 
+          title = glue('Achievement Gap Estimates: {.y} School District'), 
+          subtitle = 
+            "Negative values indicate White students have higher average achievement
+Positive values indicate Hispanic/Latino students have higher average achievement") +
+        theme(plot.title.position = 'plot')
+      }))
+```
+ 
+```{r}
+# nested_dat <- 
+#   dat %>% 
+#   group_by(district) %>% 
+#   nest()
+# 
+# plots <-
+#   nested_dat %>% 
+#   mutate(
+#     plot = pmap(
+#       list(
+#         data = nested_dat$data, 
+#         academic_year = nested_dat$data$academic_year, 
+#         district = dat$district, 
+#         n_school = dat$n_school
+#         ), ~{
+#       ggplot(
+#         data = ..1,
+#         aes(
+#           x = academic_year,
+#           y = v, 
+#           ymin = v - 1.96*v_se, 
+#           ymax = v + 1.96*v_se, 
+#           group = .y
+#           )
+#         ) +
+#         geom_errorbar(width = 0.25) +
+#         geom_line() +
+#         geom_point(
+#           aes(
+#             color = ifelse(v < 0, '#D35CFF', '#5CA3FF')
+#             ), 
+#           size = 2
+#           ) + 
+#         geom_hline(
+#           yintercept = 0, 
+#           color = '#DA5959'
+#           ) +
+#         scale_color_identity() +
+#         theme_minimal() +
+#         labs(
+#           x = 'School year', 
+#           y = 'Average achievement difference (SD units)', 
+#           caption = glue('Note: District included {..3} schools.'), 
+#           title = glue('Achievement Gap Estimates: {..2} School District'), 
+#           #subtitle = 
+# #            "Negative values indicate 
+# #<span style = 'color:#5CA3FF;'>White</span>
+# #students have higher average achievement
+# #Positive values indicate
+# #<span style='color:D35CFF;'>Hispanic/Latino</span>
+# #students have higher average achievement"
+# ) +
+#         theme(plot.title.position = 'plot')
+#       }))
 
+```
+ 
+ 
+```{r}
+p$plot[[2]]
 ```
 
 
 ## Extra Credit
 
-## 4. (10 points) Save the plots into a “plots” directory. Make sure the file names are meaningful.
+For up to one point extra credit, create a third set that “staples together” each of the preceding pairs of plots (i.e., to confirm that the plots were produced identically by both methods).
+
+```{r}
+
+```
+
+
+## 4. Save the plots into a “plots” directory. Make sure the file names are meaningful.
