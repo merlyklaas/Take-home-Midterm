@@ -1,6 +1,11 @@
 ---
-title: "Midterm"
-output: html_document
+title: "EDLD 653 Midterm"
+author: "Merly Klaas & Chris Loan"
+date: "5/5/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
@@ -86,6 +91,7 @@ d <- d %>%
 ## we are confident there is a way to do this with tidyverse,
 ## but we are getting really unexpected results with count()
 ## so this is our solution
+## we put this back in later where we need it, too (the final plot)
 
 schools_per_district <- d %>% 
   group_by(district) %>% 
@@ -99,17 +105,133 @@ d <- d %>%
   pivot_wider(names_from = student_group, values_from = n) %>% 
   clean_names() %>% 
   drop_na(hispanic_latino, white) %>% 
-  left_join(schools_per_district, by = 'district')
+  left_join(schools_per_district, by = 'district') %>% 
+  ungroup()
 
 head(d)
 ```
 
 # Part B. 
 
-## 1. Estimate the average achievement differences in terms of an effect size for every school district in the state that reported data on both student groups (i.e., using the data we created above), for each academic year. Conduct this analysis twice, once using group_by() %>% nest() map() and once using nest_by() %>% summarize().
+## 1. Estimate the average achievement differences in terms of an effect size for every school district in the state that reported data on both student groups (i.e., using the data we created above), for each academic year. Conduct this analysis twice: 
+
+### once using group_by() %>% nest() map() 
 
 ```{r}
-d[1:4, ] %>% # data source - just first four rows for first district
-  estimate_v("white", "hispanic_latino") # columns for reference/focal groups
+d_nested1 <- 
+  d %>% 
+  group_by(academic_year, district) %>% 
+  nest() %>% 
+  mutate(
+    v = map(
+      data, 
+      estimate_v, 
+      "white", 
+      "hispanic_latino")) %>% 
+  unnest(v)
+
+head(d_nested1)
 ```
 
+### and once using nest_by() %>% summarize().
+
+```{r}
+d_nested2 <- 
+  d %>% 
+  nest_by(academic_year, district) %>% 
+  mutate(
+    v = 
+      list(
+        estimate_v(data = data, "white", "hispanic_latino")
+      )
+    ) %>% 
+  unnest(v) %>% 
+  summarize(average_v = mean(v))
+
+head(d_nested2)
+```
+
+## 2. Reproduce the following plot to confirm that the estimates are equivalent across methods.
+
+```{r}
+d_nested1 %>% 
+  left_join(d_nested2, by = c('district', 'academic_year')) %>% 
+  ggplot(aes(x = v, # first method
+             y = average_v)) + # second method
+  geom_point(
+    size = 2,
+    color = 'gray',
+    alpha = 0.8
+  ) + 
+  geom_smooth(
+    method = 'lm', 
+    se = F, 
+    color = 'cornflowerblue'
+  ) +
+  theme_bw() + 
+  labs(x = 'V(`nest_by() %>% summarize()`)', 
+       y = 'V(`group_by() %>% nest() %>% mutate() %>% map()`)')
+```
+
+## 3. The plot below shows the achievement difference estimates for one school district across years. Produce a similar plot to the below for each of the first 100 school districts. Once you’ve created all the plots, reproduce them again using an alternative method. Make sure you don’t miss the caption noting the number of schools in the district.
+
+```{r}
+dists <- 
+  unique(d_nested1$district)[1:100]
+
+dat <- 
+  d_nested1 %>% 
+  filter(district %in% dists)
+```
+
+```{r}
+plot_dat <- 
+  dat %>% 
+  left_join(schools_per_district, by = 'district') %>% 
+  mutate(
+    district = stringr::str_extract(district, '[^ SD]+')
+      )
+```
+
+```{r}
+plot_dat %>% 
+  filter(district == 'Bandon') %>% 
+  ggplot(
+    aes(
+      x = academic_year,
+      y = v, 
+      ymin = v - 1.96*v_se, 
+      ymax = v + 1.96*v_se, 
+      group = district
+      )
+    ) +
+  geom_errorbar(width = 0.25) +
+  geom_line() +
+  geom_point(
+    aes(
+      color = ifelse(v < 0, '#D35CFF', '#5CA3FF')
+        ), 
+    size = 2
+    ) + 
+  geom_hline(
+    yintercept = 0, 
+    color = '#DA5959'
+    ) +
+  scale_color_identity() +
+  theme_minimal() +
+  labs(
+    x = 'School year', 
+    y = 'Average achievement difference (SD units)', 
+    caption = 'Note: District included {n_school} schools.', 
+    title = 'Achievement Gap Estimates: {district} School District', 
+    subtitle = 'Negative values indicate White students have higher average achievement
+Positive values indicate Hispanic/Latino students have higher average achievement'
+    ) +
+  theme(plot.title.position = 'plot')
+
+```
+
+
+## Extra Credit
+
+## 4. (10 points) Save the plots into a “plots” directory. Make sure the file names are meaningful.
