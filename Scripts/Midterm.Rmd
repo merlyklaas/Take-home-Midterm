@@ -18,8 +18,9 @@ library(tidyverse)
 library(rio)
 library(janitor)
 library(gapr)
-#install.packages('ggtext')
+library(gridExtra)
 library(ggtext)
+library(ggpubr)
 ```
 
 # Part A. 
@@ -31,7 +32,8 @@ download_file <- function(year) {
   link <- glue::glue("https://www.oregon.gov/ode/educator-resources/assessment/TestResults20{year}/pagr_schools_ela_raceethnicity_{year-1}{year}.xlsx")
   rio::import(link, setclass = "tibble", na = c("-", "--", "*"))
 }
-d <- map_dfr(15:18, download_file, .id=NULL)
+d0 <- map_dfr(15:18, download_file, .id=NULL)
+d0$District %>% unique()
 ```
 
 ## Cleaning
@@ -39,7 +41,7 @@ d <- map_dfr(15:18, download_file, .id=NULL)
 ### Filter for only student groups coded as "White" or "Hispanic/Latino".
 
 ```{r}
-d <- d %>%  
+d <- d0 %>%  
   filter(`Student Group` %in% c("White","Hispanic/Latino"))
 ```
 
@@ -82,8 +84,11 @@ d <- d %>%
         number_level_1 = "1", 
         number_level_2 = "2", 
         number_level_3 = "3", 
-        number_level_4 = "4")
-    )
+        number_level_4 = "4"), 
+    ## changing district name here, important later
+    district = gsub(" ", "_", district),
+    district = gsub("_SD_[0-9]+","",district)
+    ) 
 ```
 
 ## 2. Sum the n across grades and school for each district within each academic year, student group, and level. Calculate the number of schools (unique schools listed) for each district. Also move your data to a wider format where the student groups become new columns, filled by the district n. Remove districts that did not report numbers for one or both student groups (i.e., drop missing data from the new columns). 
@@ -99,7 +104,7 @@ schools_per_district <- d %>%
   group_by(district) %>% 
   summarize(n_school = length(unique(school)))
   
-d <- d %>% 
+d2 <- d %>% 
   group_by(academic_year, district, student_group, level) %>%
   summarize(
     n = sum(n)
@@ -110,7 +115,7 @@ d <- d %>%
   left_join(schools_per_district, by = 'district') %>% 
   ungroup()
 
-head(d)
+head(d2)
 ```
 
 # Part B. 
@@ -121,7 +126,7 @@ head(d)
 
 ```{r}
 d_nested1 <- 
-  d %>% 
+  d2 %>% 
   group_by(academic_year, district) %>% 
   nest() %>% 
   mutate(
@@ -131,15 +136,13 @@ d_nested1 <-
       "white", 
       "hispanic_latino")) %>% 
   unnest(v)
-
-head(d_nested1)
 ```
 
 ### and once using nest_by() %>% summarize().
 
 ```{r}
 d_nested2 <- 
-  d %>% 
+  d2 %>% 
   nest_by(academic_year, district) %>% 
   mutate(
     v = 
@@ -149,8 +152,6 @@ d_nested2 <-
     ) %>% 
   unnest(v) %>% 
   summarize(average_v = mean(v))
-
-head(d_nested2)
 ```
 
 ## 2. Reproduce the following plot to confirm that the estimates are equivalent across methods.
@@ -185,17 +186,14 @@ dat <-
   d_nested1 %>% 
   filter(district %in% dists) %>% 
   left_join(schools_per_district, by = 'district') %>% 
-  mutate(
-    district = stringr::str_extract(district, '[^ ]+')
-      ) %>% 
   select(-data, -auc)
 
 ```
 
-### Method 1
+### Method 1: nest()
 
 ```{r}
- p <- 
+p <- 
   dat %>% 
   group_by(district, n_school) %>% 
   nest() %>% 
@@ -243,85 +241,104 @@ dat <-
 
 ```
  
-### Method 2
+### Method 2 nest_by()
 
 ```{r}
-#p2 <-
-looped_plots <- tibble(district = dat$district, 
-                       plot = list())
-
-```
-
-# THIS NEEDS TO BE FIXED STILL
-
-```{r}
-# midterm_plot <-
-#   function(data, academic_year, v, v_se, given_district, n_school){
-#     data_to_use <- data[which(data$district == given_district),]
-#     p <- 
-#       ggplot(
-#       data = data_to_use,
-#       aes(
-#         x = academic_year,
-#         y = v, 
-#         ymin = v - 1.96*v_se, 
-#         ymax = v + 1.96*v_se, 
-#         group = district
-#         )
-#       ) +
-#     geom_errorbar(width = 0.25) +
-#     geom_line() +
-#     geom_point(
-#       aes(
-#         color = ifelse(v < 0, '#D35CFF', '#5CA3FF')
-#         ), 
-#       size = 2
-#       ) + 
-#     geom_hline(
-#       yintercept = 0, 
-#       color = '#DA5959'
-#       ) +
-#     scale_color_identity() +
-#     theme_minimal() +
-#     labs(
-#       x = 'School year', 
-#       y = 'Average achievement difference (SD units)', 
-#       #caption = glue('Note: District included {n_school} schools.'), 
-#       #title = glue('Achievement Gap Estimates: {district} School District'), 
-#       subtitle = 
-#         "Negative values indicate White students have higher average achievement
-# Positive values indicate Hispanic/Latino students have higher average achievement") +
-#     theme(plot.title.position = 'plot')
-#     return(p)
-#   }
-
-```
-
-```{r}
-# for (i in 1:nrow(dat)){
-#   district_i <- looped_plots$district[i]
-#   looped_plots$plot[i] <-
-#   midterm_plot(
-#       data = dat, 
-#       academic_year = academic_year, 
-#       v = v, 
-#       v_se = v_se, 
-#       given_district = district_i, 
-#       n_school = n_school
-#       )
-#   return(looped_plots$plot[i])
-#   #return(looped_plots)
-# }
-```
- 
-```{r}
-p$plot[[6]]
+p2 <- 
+  dat %>% 
+  ungroup() %>% 
+  mutate(
+    caption = glue('Note: District included {n_school} schools.'),
+    title = glue('Achievement Gap Estimates: {district} School District'),
+  ) %>% 
+  nest_by(district, caption, title) %>% 
+  mutate(
+    plot = list(
+      ggplot(
+        data = data,
+        aes(
+          x = academic_year,
+          y = v, 
+          ymin = v - 1.96*v_se, 
+          ymax = v + 1.96*v_se
+          )
+        ) +
+        geom_errorbar(width = 0.25) +
+        geom_line(group = district) +
+        geom_point(
+          aes(
+            color = ifelse(v < 0, '#D35CFF', '#5CA3FF')
+            ), 
+          size = 2
+          ) + 
+        geom_hline(
+          yintercept = 0, 
+          color = '#DA5959'
+          ) +
+        scale_color_identity() +
+        theme_minimal() +
+        labs(
+          x = 'School year', 
+          y = 'Average achievement difference (SD units)', 
+          title = title, 
+          caption = caption,
+          subtitle =
+          "Negative values indicate <span style = 'color:#5CA3FF;'>White</span> students have higher average achievement <br> Positive values indicate <span style='color:#D35CFF;'>Hispanic/Latino</span> students have higher average achievement"
+          ) +
+        theme(
+          plot.title.position = 'plot', 
+          plot.subtitle = element_markdown(), 
+          plot.title = element_markdown('bold')
+          )
+      )
+    )
 ```
 
 ## Extra Credit
 
 For up to one point extra credit, create a third set that “staples together” each of the preceding pairs of plots (i.e., to confirm that the plots were produced identically by both methods).
 
+```{r include=FALSE}
+## Doing this 2x so it doesn't print all output
+## going to have the second code chunk shown but not evaluated
+stapled_plots <- 
+  list(
+    plots = 
+      map2(
+        .x = p$plot, 
+        .y = p2$plot,
+        ~grid.arrange(
+          .x + 
+            labs(y = '', x = '',caption = ''),
+          .y + 
+            labs(title = '', subtitle = '')
+          ) %>% 
+          as_ggplot()
+        )
+    )
+```
+
+```{r eval = F, echo = T}
+stapled_plots <- 
+  list(
+    plots = 
+      map2(
+        .x = p$plot, 
+        .y = p2$plot,
+        ~grid.arrange(
+          .x + 
+            labs(y = '', x = '',caption = ''),
+          .y + 
+            labs(title = '', subtitle = '')
+          ) %>% 
+          as_ggplot()
+        )
+    )
+```
+
+```{r}
+stapled_plots$plots[1:3]
+```
 
 ## 4. Save the plots into a “plots” directory. Make sure the file names are meaningful.
 
@@ -332,12 +349,13 @@ paths
 ```
 
 ```{r}
-p %>% 
+stapled_plots$plots %>% 
   ungroup() %>%
   mutate(path = paths) %>% 
   rowwise() %>%
   summarize(
     ggsave(
+      device = 'png', 
       filename = paths, 
       plot = plot, 
       width = 9.5, 
