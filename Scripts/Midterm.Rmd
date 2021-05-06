@@ -347,13 +347,7 @@ files <- str_replace_all(tolower(p$district), " ", "-")
 paths <- here::here("Plots", glue("{files}.png"))
 paths
 ```
-### Add paths to data frame
-```{r}
-p %>% 
-  ungroup() %>%
-  mutate(path = paths) %>% 
-  select(plot, path)
-```
+
 ### Save plots to folder
 
 ```{r}
