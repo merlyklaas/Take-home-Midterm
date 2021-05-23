@@ -228,7 +228,7 @@ p <-
           caption = glue('Note: District included {..3} schools.'), 
           title = glue('Achievement Gap Estimates: {..2} School District'), 
           subtitle =
-           "Negative values indicate <span style = 'color:#5CA3FF;'>White</span> students have higher average achievement <br> Positive values indicate <span style='color:#D35CFF;'>Hispanic/Latino</span> students have higher average achievement") +
+           "Negative values indicate <span style = 'color:#D35CFF;'>White</span> students have higher average achievement <br> Positive values indicate <span style='color:#5CA3FF;'>Hispanic/Latino</span> students have higher average achievement") +
         theme(
           plot.title.position = 'plot', 
           plot.subtitle = element_markdown(), 
